@@ -1,13 +1,17 @@
 <?xml version="1.0"?>
 <project name="otpcard" default="convert" basedir=".">
   <description>Ant build for OTPcard applet</description>
-  <property name="jc.home" value="ext/oracle_javacard_sdks/jc305u4_kit"/>
+  <property name="jc.home" value="jc305u4_kit"/>
   <get src="https://github.com/martinpaljak/ant-javacard/releases/download/v25.08.21/ant-javacard.jar" dest="." skipexisting="true"/>
   <taskdef name="javacard" classname="pro.javacard.ant.JavaCard" classpath="ant-javacard.jar"/>
   <target name="convert">
     <javacard>
-      <cap export="build" output="otpcard.cap" sources="src" aid="A0000000020201" version="1.0">
-        <applet class="otpcard.OTPCard" aid="A000000002020101"/>
+      <cap jckit="jc305u4_kit"
+           output="OTPCard.cap"
+           aid="A0000000020201"
+           classes="."
+           version="1.0">
+        <applet class="com.vladtcvs.otpcard.OTPCard" aid="A000000002020101"/>
       </cap>
     </javacard>
   </target>

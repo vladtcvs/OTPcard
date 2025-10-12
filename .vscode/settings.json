@@ -1,5 +1,13 @@
 {
   "java.project.referencedLibraries": [
-    "ext/oracle_javacard_sdks/jc305u4_kit/lib/api_classic.jar"
-  ]
+    "ext/oracle_javacard_sdks/jc305u4_kit/lib/api_classic.jar",
+    "ext/jcardsim-3.0.5.jar",
+    "test-lib1/**/*.jar"
+  ],
+  "java.project.sourcePaths": [
+        "src/main/java",
+        "src/test/java"
+  ],
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.home": "/home/vlad/distr/JavaCard/jdk/jdk-11.0.2"
 }

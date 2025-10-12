@@ -1,8 +1,7 @@
-package otpcard;
+package com.vladtcvs.otpcard;
 
 import javacard.framework.*;
 import javacard.security.*;
-import javacardx.crypto.*;
 
 // Here we implement HOTP RFC-4226
 // https://datatracker.ietf.org/doc/html/rfc4226
