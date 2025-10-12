@@ -6,8 +6,8 @@
   <taskdef name="javacard" classname="pro.javacard.ant.JavaCard" classpath="ant-javacard.jar"/>
   <target name="convert">
     <javacard>
-      <cap export="build" output="otpcard.cap" sources="src" aid="A00000000102" version="1.0">
-        <applet class="otpcard.OTPCard" aid="A0000000010201"/>
+      <cap export="build" output="otpcard.cap" sources="src" aid="A0000000020201" version="1.0">
+        <applet class="otpcard.OTPCard" aid="A000000002020101"/>
       </cap>
     </javacard>
   </target>
