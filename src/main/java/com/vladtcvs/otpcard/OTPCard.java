@@ -330,13 +330,13 @@ public class OTPCard extends Applet {
         getRecord(buffer, (short)0, (short)buffer.length, (short)ISO7816.OFFSET_LC, out);
     }
 
-    private short getEClength(byte[] buffer, short lc_len)
+    /*private short getEClength(byte[] buffer, short lc_len)
     {
         short ec_offset = (short)(ISO7816.OFFSET_LC + 1 + lc_len);
         if (ec_offset >= buffer.length)
             return 0;
         return buffer[ec_offset];
-    }
+    }*/
 
     private void getPin(byte[] buffer, short lc_offset, short lc_len, short pos, short[] out) throws ISOException
     {

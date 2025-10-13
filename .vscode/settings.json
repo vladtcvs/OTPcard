@@ -8,6 +8,5 @@
         "src/main/java",
         "src/test/java"
   ],
-  "java.configuration.updateBuildConfiguration": "automatic",
-  "java.home": "/home/vlad/distr/JavaCard/jdk/jdk-11.0.2"
+  "java.configuration.updateBuildConfiguration": "automatic"
 }
