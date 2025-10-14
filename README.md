@@ -30,13 +30,18 @@ sh buildcap.sh
 
 # Install
 
-`java -jar gp.jar --key <ISD KEY> --install OTPCard.cap --params 08080606`
+`java -jar gp.jar --key <ISD KEY> --install OTPCard.cap --params 0808060600010203`
 
 Where params:
 * max amount of secrets
 * max secret name length
 * PIN attempts count
 * Admin PIN attempts count
+* serial number byte 0
+* serial number byte 1
+* serial number byte 2
+* serial number byte 3
+
 
 # Usage
 

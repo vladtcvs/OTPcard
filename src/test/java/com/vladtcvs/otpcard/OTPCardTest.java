@@ -23,8 +23,8 @@ public class OTPCardTest {
                          (byte)0xA0, 0x00, 0x00, 0x00, 0x02, 0x02, 0x01, 0x01, // AID
                          0x01, // CI len
                          0x00, // CI data
-                         0x04,  // AD len
-                         0x08, 0x08, 0x06, 0x06 // AD
+                         0x08,  // AD len
+                         0x08, 0x08, 0x06, 0x06, 0x21, 0x22, 0x23, 0x24 // AD
                         };
         sim.installApplet(appletAID, OTPCard.class, params, (short)0, (byte)params.length);
         sim.selectApplet(appletAID);
@@ -33,9 +33,16 @@ public class OTPCardTest {
     @Test
     public void GetINFO_Test() {
         // Send APDU
-        byte[] apdu = {(byte)0x00, 0x08, 0x00, 0x00, 0x01, 0x00};
+        byte[] apdu = {(byte)0x00, 0x08, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00};
         byte[] resp = sim.transmitCommand(apdu);
-        assertArrayEquals(new byte[]{(byte)0x08, 0x08, (byte)0x90, 0x00}, resp);
+        assertArrayEquals(new byte[]{(byte)0x08,
+                                     (byte)0x08,
+                                     64,
+                                     1, // SHA-1
+                                     0, // SHA-256
+                                     0, // SHA-512
+                                     0x21, 0x22, 0x23, 0x24,
+                                     (byte)0x90, 0x00}, resp);
     }
 
 }

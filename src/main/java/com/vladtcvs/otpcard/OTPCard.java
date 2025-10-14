@@ -203,7 +203,8 @@ public class OTPCard extends Applet {
         }
     }
 
-    OTPRecord[] otp_records;
+    // Secrets
+    private OTPRecord[] otp_records;
 
     // Default data
     private static final byte[] PIN_DEFAULT = {'1', '2', '3', '4', '5', '6'};
@@ -214,21 +215,36 @@ public class OTPCard extends Applet {
     // Data configured from parameters
     private final byte maxSecrets;
     private final byte maxSecretNameLength;
+    private final byte[] serial_number;
+
+    // Card capabilities
+    private final byte sha1support;
+    private final byte sha256support;
+    private final byte sha512support;
 
     // Persistent data
     private OwnerPIN PIN;
     private OwnerPIN AdminPIN;
 
     protected OTPCard(byte[] buf, short offData, byte lenData) {
-        if (lenData < 4) {
+        if (lenData != 8) {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
 
-        maxSecrets = buf[offData];
-        maxSecretNameLength = buf[(short)(offData + 1)];
+        short off = offData;
+        maxSecrets = buf[off++];
+        maxSecretNameLength = buf[off++];
 
-        byte PIN_reset_count = buf[(short)(offData + 2)];
-        byte AdminPIN_reset_count = buf[(short)(offData + 3)];
+        byte PIN_reset_count = buf[off++];
+        byte AdminPIN_reset_count = buf[off++];
+
+        serial_number = new byte[4];
+        for (short i = 0; i < 4; i++)
+            serial_number[i] = buf[off++];
+
+        sha1support = 1;
+        sha256support = 0;
+        sha512support = 0;
 
         PIN = new OwnerPIN(PIN_reset_count, MAX_PIN_SIZE);
         PIN.update(PIN_DEFAULT, (short)0, (byte)PIN_DEFAULT.length);
@@ -500,12 +516,20 @@ public class OTPCard extends Applet {
     {
         byte[] buffer = apdu.getBuffer();
 
-        if (buffer.length < 3)
+        if (buffer.length < 10)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         short anslen = 0;
         buffer[anslen++] = maxSecrets;
         buffer[anslen++] = maxSecretNameLength;
+        buffer[anslen++] = 64; // max Secret length
+        buffer[anslen++] = sha1support;
+        buffer[anslen++] = sha256support;
+        buffer[anslen++] = sha512support;
+        buffer[anslen++] = serial_number[0];
+        buffer[anslen++] = serial_number[1];
+        buffer[anslen++] = serial_number[2];
+        buffer[anslen++] = serial_number[3];
         apdu.setOutgoingAndSend((short) 0, anslen);
     }
 
