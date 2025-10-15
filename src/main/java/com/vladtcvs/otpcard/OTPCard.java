@@ -574,8 +574,8 @@ public class OTPCard extends Applet {
         pos = readed[2];
 
         getNumber(buffer, off_lc_data, lc_len, pos, readed);
-        short default_method_pos = readed[0];
-        byte method = buffer[(short)(off_lc_data + default_method_pos)];
+        short method_pos = readed[0];
+        byte method = buffer[(short)(off_lc_data + method_pos)];
         pos = readed[2];
 
         if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))

@@ -80,8 +80,8 @@ if __name__ == "__main__":
     Le = 0
     response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
 
-    secret = b'123123123'
-    name = b'test'
+    secret = b'SECRET'
+    name = b'NAME'
     method = 1
     if False:
         args = [len(pin)] + list(pin) + [secret_id] + [len(secret)] + list(secret) + [len(name)] + list(name) + [method]
