@@ -10,7 +10,7 @@ import com.licel.jcardsim.utils.*;
 
 import javacard.framework.*;
 
-public class OTPCardTest {
+public class OTPCardTest_getInfo {
 
     private Simulator sim;
 
@@ -24,7 +24,7 @@ public class OTPCardTest {
                          0x01, // CI len
                          0x00, // CI data
                          0x08,  // AD len
-                         0x08, 0x08, 0x06, 0x06, 0x21, 0x22, 0x23, 0x24 // AD
+                         0x08, 0x08, 0x03, 0x03, 0x21, 0x22, 0x23, 0x24 // AD
                         };
         sim.installApplet(appletAID, OTPCard.class, params, (short)0, (byte)params.length);
         sim.selectApplet(appletAID);
@@ -33,7 +33,7 @@ public class OTPCardTest {
     @Test
     public void GetINFO_Test() {
         // Send APDU
-        byte[] apdu = {(byte)0x00, 0x08, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00};
+        byte[] apdu = {(byte)0x00, 0x08, 0x00, 0x00, 5, 0x00, 0x00, 0x00, 0x00, 0x00};
         byte[] resp = sim.transmitCommand(apdu);
         assertArrayEquals(new byte[]{(byte)0x08,
                                      (byte)0x08,
@@ -44,6 +44,5 @@ public class OTPCardTest {
                                      0x21, 0x22, 0x23, 0x24,
                                      (byte)0x90, 0x00}, resp);
     }
-
 }
 
