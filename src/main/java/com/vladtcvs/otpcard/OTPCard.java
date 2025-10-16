@@ -8,32 +8,36 @@ import javacard.security.*;
 
 /*
  * Commands:
- *      HOTP                - generate new HOTP
- *          Arguments:  PIN, secret id, challenge
- *          Returns:    status, OTP
- *
- *      SAVE_PIN            - save new PIN
- *          Arguments:  old PIN, new PIN
+ *      PIN             - authenticate
+ *          Arguments:  PIN
  *          Returns:    status
  *
- *      UNBLOCK_PIN         - reset PIN counter
+ *      HOTP            - generate new HOTP
+ *          Arguments:  secret id, challenge
+ *          Returns:    status, OTP
+ *
+ *      SAVE_PIN        - save new PIN
+ *          Arguments:  new PIN
+ *          Returns:    status
+ *
+ *      UNBLOCK_PIN     - reset PIN counter
  *          Arguments:  AdminPIN, new PIN
  *          Returns:    status
  *
- *      SAVE_ADMIN_PIN      - save new AdminPIN
+ *      SAVE_ADMIN_PIN  - save new AdminPIN
  *          Arguments:  oldAdminPIN, newAdminPIN
  *          Returns:    status
  * 
- *      SAVE_NEW_SECRET     - saves new secret to card
- *          Arguments:  PIN, secret value, secret name, current time, secret metadata, hash method (SHA1, SHA256, SHA512)
+ *      SAVE_NEW_SECRET - saves new secret to card
+ *          Arguments:  secret value, secret name, current time, secret metadata, hash method (SHA1, SHA256, SHA512)
  *          Returns:    status, secret id
  *
- *      DELETE_SECRET       - delete secret
- *          Arguments:  PIN, secret id
+ *      DELETE_SECRET   - delete secret
+ *          Arguments:  secret id
  *          Returns:    status
  *
  *      GET_SECRET_STATUS   - get name and usage status (used or not) of secret with id
- *          Arguments:  PIN, id
+ *          Arguments:  id
  *          Returns:    status, secret name, secret used flag, hash method (SHA1, SHA256, SHA512)
  *
  *      GET_INFO            - get info about applet
@@ -56,6 +60,8 @@ public class OTPCard extends Applet {
         byte SAVE_ADMIN_PIN = (byte) 0x07;
 
         byte GET_INFO = (byte) 0x08;
+
+        byte PIN = (byte) 0x42;
     }
 
     private interface HMAC_HASH {
@@ -167,6 +173,8 @@ public class OTPCard extends Applet {
                     ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
                 }
             }
+
+            JCSystem.beginTransaction();
             method = new_method;
             Util.arrayCopyNonAtomic(buffer, secret_off, secret, (short)0, secret_len);
             Util.arrayCopyNonAtomic(buffer, name_off, name, (short)0, name_len);
@@ -176,13 +184,16 @@ public class OTPCard extends Applet {
             // By power usage or delays
             for (short i = secret_len; i < 64; i++)
                 secret[i] = 0;
+            JCSystem.commitTransaction();
         }
 
         public void Clear()
         {
+            JCSystem.beginTransaction();
             name_length = 0;
             method = HMAC_HASH.NONE;
             digest = null;
+            JCSystem.commitTransaction();
         }
 
         public boolean IsUsed()
@@ -226,6 +237,9 @@ public class OTPCard extends Applet {
     private OwnerPIN PIN;
     private OwnerPIN AdminPIN;
 
+    // Temporary data
+    private short[] readed;
+
     protected OTPCard(byte[] buf, short offData, byte lenData) {
         if (lenData != 8) {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -255,6 +269,8 @@ public class OTPCard extends Applet {
         otp_records = new OTPRecord[maxSecrets];
         for (short i = 0; i < maxSecrets; i++)
             otp_records[i] = new OTPRecord(maxSecretNameLength);
+        
+        readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
     }
 
     public static void install(byte[] buf, short off, byte bLength) {
@@ -284,6 +300,9 @@ public class OTPCard extends Applet {
         }
 
         switch (buffer[ISO7816.OFFSET_INS]) {
+            case INS.PIN:
+                checkPIN(apdu);
+                break;
             case INS.HMAC:
                 generateHMAC(apdu);
                 break;
@@ -298,13 +317,13 @@ public class OTPCard extends Applet {
                 break;
 
             case INS.SAVE_PIN:
-                updatePin(apdu, PIN);
+                updatePin(apdu);
                 break;
             case INS.UNBLOCK_PIN:
                 unblockPin(apdu);
                 break;
             case INS.SAVE_ADMIN_PIN:
-                updatePin(apdu, AdminPIN);
+                updateAdminPin(apdu);
                 break;
 
             case INS.GET_INFO:
@@ -368,10 +387,34 @@ public class OTPCard extends Applet {
         out[2] = (short)(pos + 1);
     }
 
-    private void generateHMAC(APDU apdu)
+    private void checkPIN(APDU apdu)
     {
         byte[] buffer = apdu.getBuffer();
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
+        getReceivedData(buffer, readed);
+        short off_lc_data = readed[0];
+        short lc_len = readed[1];
+        
+        // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
+        // Data has form <PIN_LEN> PIN <SECRET ID> <CHALLENGE LEN> CHALLENGE
+        // Returned array with hash result
+        getPin(buffer, off_lc_data, lc_len, (short)0, readed);
+        short cur_pin_pos = readed[0];
+        short cur_pin_len = readed[1];
+
+        short attempts = PIN.getTriesRemaining();
+        if (attempts == 0)
+            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+
+        if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+    }
+
+    private void generateHMAC(APDU apdu)
+    {
+        if (!PIN.isValidated())
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
+        byte[] buffer = apdu.getBuffer();
 
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
@@ -379,13 +422,9 @@ public class OTPCard extends Applet {
         //short ec_len = getEClength(buffer, lc_len);
 
         // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
-        // Data has form <PIN_LEN> PIN <SECRET ID> <CHALLENGE LEN> CHALLENGE
+        // Data has form <SECRET ID> <CHALLENGE LEN> CHALLENGE
         // Returned array with hash result
         short pos = 0;
-        getPin(buffer, off_lc_data, lc_len, pos, readed);
-        short cur_pin_pos = readed[0];
-        short cur_pin_len = readed[1];
-        pos = readed[2];
 
         getNumber(buffer, off_lc_data, lc_len, pos, readed);
         short secret_id_pos = readed[0];
@@ -399,8 +438,6 @@ public class OTPCard extends Applet {
         Util.arrayCopyNonAtomic(buffer, (short)(off_lc_data + challenge_pos), challenge_data, (short)0, challenge_len);
         pos = readed[2];
 
-        if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         if (id >= otp_records.length)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
@@ -410,7 +447,9 @@ public class OTPCard extends Applet {
 
     private void getSecretStatus(APDU apdu)
     {
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
+        if (!PIN.isValidated())
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
         byte[] buffer = apdu.getBuffer();
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
@@ -418,20 +457,14 @@ public class OTPCard extends Applet {
         //short ec_len = getEClength(buffer, lc_len);
 
         // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
-        // Data has form <PIN_LEN> PIN <SECRET ID>
+        // Data has form <SECRET ID>
         // Returned data has form <USED> <NAME LEN> NAME <METHOD>
         short pos = 0;
-        getPin(buffer, off_lc_data, lc_len, pos, readed);
-        short cur_pin_pos = readed[0];
-        short cur_pin_len = readed[1];
-        pos = readed[2];
 
         getNumber(buffer, off_lc_data, lc_len, pos, readed);
         short secret_id_pos = readed[0];
         byte id = buffer[(short)(off_lc_data + secret_id_pos)];
 
-        if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         if (id >= otp_records.length)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
@@ -451,28 +484,26 @@ public class OTPCard extends Applet {
         apdu.setOutgoingAndSend((short) 0, anslen);
     }
 
-    private void updatePin(APDU apdu, OwnerPIN pin)
+    private void updatePin(APDU apdu)
     {
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
+        if (!PIN.isValidated())
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
         byte[] buffer = apdu.getBuffer();
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
         short lc_len = readed[1];
 
         // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
-        // Data has form <PIN_LEN> PIN <NEW_PIN_LEN> NEWPIN
+        // Data has form <NEW_PIN_LEN> NEWPIN
         short pos = 0;
-        getPin(buffer, off_lc_data, lc_len, pos, readed);
-        short cur_pin_pos = readed[0];
-        short cur_pin_len = readed[1];
-        pos = readed[2];
 
         getPin(buffer, off_lc_data, lc_len, pos, readed);
         short new_pin_pos = readed[0];
         short new_pin_len = readed[1];
         pos = readed[2];
 
-        if ((short)(cur_pin_len + new_pin_len + 2) != lc_len)
+        if (new_pin_len + 1 != lc_len)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         if (new_pin_len > MAX_PIN_SIZE)
@@ -481,33 +512,67 @@ public class OTPCard extends Applet {
         if (new_pin_len < MIN_PIN_SIZE)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
-        // So we have old pin and new pin now
-        // Check pin
-        short attempts = pin.getTriesRemaining();
-        if (attempts == 0)
-            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-        if (!pin.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-
-        JCSystem.beginTransaction();
-        pin.update(buffer, (short)(off_lc_data + new_pin_pos), (byte)new_pin_len);
-        pin.resetAndUnblock();
-        JCSystem.commitTransaction();
+        PIN.update(buffer, (short)(off_lc_data + new_pin_pos), (byte)new_pin_len);
+        PIN.resetAndUnblock();
     }
 
-    private void unblockPin(APDU apdu)
+    private void updateAdminPin(APDU apdu)
     {
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
         byte[] buffer = apdu.getBuffer();
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
         short lc_len = readed[1];
 
         // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
-        // Data has form <ADMIN_PIN_LEN> ADMIN_PIN
+        // Data has form <ADMIN_PIN_LEN> ADMIN_PIN <NEW_ADMIN_PIN_LEN> NEW_ADMIN_PIN
+        short pos = 0;
+
+        getPin(buffer, off_lc_data, lc_len, pos, readed);
+        short pin_pos = readed[0];
+        short pin_len = readed[1];
+        pos = readed[2];
+
+        getPin(buffer, off_lc_data, lc_len, pos, readed);
+        short new_pin_pos = readed[0];
+        short new_pin_len = readed[1];
+        pos = readed[2];
+
+        if (pin_len + new_pin_len + 2 != lc_len)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+        if (AdminPIN.getTriesRemaining() == 0)
+            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+
+        if (!AdminPIN.check(buffer, (short)(off_lc_data + pin_pos), (byte)pin_len))
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
+        if (new_pin_len > MAX_PIN_SIZE)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+        if (new_pin_len < MIN_PIN_SIZE)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+        AdminPIN.update(buffer, (short)(off_lc_data + new_pin_pos), (byte)new_pin_len);
+        AdminPIN.reset();
+    }
+
+    private void unblockPin(APDU apdu)
+    {
+        byte[] buffer = apdu.getBuffer();
+        getReceivedData(buffer, readed);
+        short off_lc_data = readed[0];
+        short lc_len = readed[1];
+
+        // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
+        // Data has form <ADMIN_PIN_LEN> ADMIN_PIN <NEW_PIN_LEN> NEW_PIN
         getPin(buffer, off_lc_data, lc_len, (short)0, readed);
         short admin_pin_pos = readed[0];
         short admin_pin_len = readed[1];
+        short pos = readed[2];
+
+        getPin(buffer, off_lc_data, lc_len, (short)pos, readed);
+        short new_pin_pos = readed[0];
+        short new_pin_len = readed[1];
 
         // Check pin
         short attempts = AdminPIN.getTriesRemaining();
@@ -516,9 +581,9 @@ public class OTPCard extends Applet {
         if (!AdminPIN.check(buffer, (short)(off_lc_data + admin_pin_pos), (byte)admin_pin_len))
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 
-        JCSystem.beginTransaction();
+        PIN.update(buffer, (short)(off_lc_data + new_pin_pos), (byte)new_pin_len);
         PIN.resetAndUnblock();
-        JCSystem.commitTransaction();
+        AdminPIN.reset();
     }
 
     private void getInfo(APDU apdu)
@@ -544,19 +609,16 @@ public class OTPCard extends Applet {
 
     private void storeSecret(APDU apdu)
     {
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
+        if (!PIN.isValidated())
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
         byte[] buffer = apdu.getBuffer();
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
         short lc_len = readed[1];
 
-        // Data has form <PIN LEN> PIN <SECRET ID> <SECRET LEN> SECRET <NAME LEN> NAME <METHOD>
+        // Data has form <SECRET ID> <SECRET LEN> SECRET <NAME LEN> NAME <METHOD>
         short pos = 0;
-
-        getPin(buffer, off_lc_data, lc_len, pos, readed);
-        short cur_pin_pos = readed[0];
-        short cur_pin_len = readed[1];
-        pos = readed[2];
 
         getNumber(buffer, off_lc_data, lc_len, pos, readed);
         short secret_id_pos = readed[0];
@@ -578,8 +640,6 @@ public class OTPCard extends Applet {
         byte method = buffer[(short)(off_lc_data + method_pos)];
         pos = readed[2];
 
-        if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         if (id >= otp_records.length)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
@@ -609,27 +669,24 @@ public class OTPCard extends Applet {
 
     private void clearSecret(APDU apdu)
     {
-        short[] readed = JCSystem.makeTransientShortArray((short)3, JCSystem.CLEAR_ON_DESELECT);
+        if (!PIN.isValidated())
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+
         byte[] buffer = apdu.getBuffer();
         getReceivedData(buffer, readed);
         short off_lc_data = readed[0];
         short lc_len = readed[1];
 
         // Transmitted data is located at ISO7816.OFFSET_LC+1 and has length "lc"
-        // Data has form <PIN_LEN> PIN <NEW_PIN_LEN> NEWPIN
+        // Data has form <NEW_PIN_LEN> NEWPIN
         short pos = 0;
-        getPin(buffer, off_lc_data, lc_len, pos, readed);
-        short cur_pin_pos = readed[0];
-        short cur_pin_len = readed[1];
-        pos = readed[2];
 
         getNumber(buffer, off_lc_data, lc_len, pos, readed);
         short secret_id_pos = readed[0];
         byte id = buffer[(short)(off_lc_data + secret_id_pos)];
-        if (!PIN.check(buffer, (short)(off_lc_data + cur_pin_pos), (byte)cur_pin_len))
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         if (id >= otp_records.length)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
+
         otp_records[id].Clear();
     }
 }

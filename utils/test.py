@@ -1,6 +1,7 @@
 from smartcard.System import readers
 from smartcard.util import toHexString
 
+import base64
 import hmac
 import hashlib
 
@@ -55,6 +56,7 @@ if __name__ == "__main__":
 #    AID = [0xA0, 0x00, 0x00, 0x00, 0x02, 0x02, 0x01, 0x01]
     AID = [0xA0, 0x00, 0x00, 0x00, 0x02, 0x02, 0x01, 0x01]
 
+    print("Select HMAC")
     CLA = 0x00
     INS = 0xA4
     P1 = 0x04
@@ -62,6 +64,7 @@ if __name__ == "__main__":
     Le = 0
     send_apdu(CLA, INS, P1, P2, Le, AID, connection)
 
+    print("Get INFO")
     args = []
     CLA = 0x00
     INS = 0x08 # GetINFO
@@ -70,6 +73,7 @@ if __name__ == "__main__":
     Le = 2
     response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
 
+    print("Get secret status")
     pin = b'123456'
     secret_id = 0
     args = [len(pin)] + list(pin) + [secret_id]
@@ -80,10 +84,13 @@ if __name__ == "__main__":
     Le = 0
     response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
 
-    secret = b'SECRET'
+    secret = b'SECRETABCD'
     name = b'NAME'
     method = 1
     if False:
+        secretB32 = base64.b32encode(secret)
+        print("Set secret")
+        print("secret base32 = ", secretB32)
         args = [len(pin)] + list(pin) + [secret_id] + [len(secret)] + list(secret) + [len(name)] + list(name) + [method]
         CLA = 0x00
         INS = 0x03 # Save secret
@@ -92,6 +99,7 @@ if __name__ == "__main__":
         Le = 0
         response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
     
+    print("Get HMAC")
     challenge = b'CHALLENGE'
     args = [len(pin)] + list(pin) + [secret_id] + [len(challenge)] + list(challenge)
     CLA = 0x00

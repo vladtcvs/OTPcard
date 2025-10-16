@@ -33,9 +33,10 @@ public class OTPCardTest_unblockPIN {
     @Test
     public void Success() {
         // Send APDU
-        byte[] apdu_bad = {(byte)0x00, 0x05, 0x00, 0x00, 15, 6, '1', '2', '3', '4', '5', '5', 7, '7', '6', '5', '4', '3', '2', '1'};
-        byte[] apdu_good = {(byte)0x00, 0x05, 0x00, 0x00, 15, 6, '1', '2', '3', '4', '5', '6', 7, '7', '6', '5', '4', '3', '2', '1'};
-        byte[] apdu_unlock = {(byte)0x00, 0x06, 0x00, 0x00, 9, 8, '1', '2', '3', '4', '5', '6', '7', '8'};
+        byte[] apdu_bad = {(byte)0x00, 0x42, 0x00, 0x00, 7, 6, '1', '2', '3', '4', '5', '5'};
+        byte[] apdu_good = {(byte)0x00, 0x42, 0x00, 0x00, 7, 6, '1', '2', '3', '4', '5', '6'};
+        byte[] apdu_good2 = {(byte)0x00, 0x42, 0x00, 0x00, 7, 6, '6', '5', '4', '3', '2', '1'};
+        byte[] apdu_unlock = {(byte)0x00, 0x06, 0x00, 0x00, 16, 8, '1', '2', '3', '4', '5', '6', '7', '8', 6, '6', '5', '4', '3', '2', '1'};
 
         byte[] resp = sim.transmitCommand(apdu_bad);
         assertArrayEquals(new byte[]{(byte)0x69, (byte)0x82}, resp);
@@ -57,17 +58,17 @@ public class OTPCardTest_unblockPIN {
         assertArrayEquals(new byte[]{(byte)0x90, (byte)0x00}, resp);
 
         // new attempt
-        resp = sim.transmitCommand(apdu_good);
+        resp = sim.transmitCommand(apdu_good2);
         assertArrayEquals(new byte[]{(byte)0x90, (byte)0x00}, resp);
     }
 
     @Test
     public void Admin_lock() {
         // Send APDU
-        byte[] apdu_bad = {(byte)0x00, 0x05, 0x00, 0x00, 15, 6, '1', '2', '3', '4', '5', '5', 7, '7', '6', '5', '4', '3', '2', '1'};
-        byte[] apdu_good = {(byte)0x00, 0x05, 0x00, 0x00, 15, 6, '1', '2', '3', '4', '5', '6', 7, '7', '6', '5', '4', '3', '2', '1'};
-        byte[] apdu_unlock_bad = {(byte)0x00, 0x06, 0x00, 0x00, 9, 8, '1', '2', '3', '4', '5', '6', '7', '7'};
-        byte[] apdu_unlock_good = {(byte)0x00, 0x06, 0x00, 0x00, 9, 8, '1', '2', '3', '4', '5', '6', '7', '8'};
+        byte[] apdu_bad = {(byte)0x00, 0x42, 0x00, 0x00, 7, 6, '1', '2', '3', '4', '5', '5'};
+        byte[] apdu_good = {(byte)0x00, 0x42, 0x00, 0x00, 7, 6, '1', '2', '3', '4', '5', '6'};
+        byte[] apdu_unlock_bad = {(byte)0x00, 0x06, 0x00, 0x00, 16, 8, '1', '2', '3', '4', '5', '6', '7', '7', 6, '6', '5', '4', '3', '2', '1'};
+        byte[] apdu_unlock_good = {(byte)0x00, 0x06, 0x00, 0x00, 16, 8, '1', '2', '3', '4', '5', '6', '7', '8', 6, '6', '5', '4', '3', '2', '1'};
 
         byte[] resp = sim.transmitCommand(apdu_bad);
         assertArrayEquals(new byte[]{(byte)0x69, (byte)0x82}, resp);
