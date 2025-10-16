@@ -73,10 +73,22 @@ if __name__ == "__main__":
     Le = 2
     response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
 
+    print("Authenticate")
+    pin = b'123456'
+    secret_id = 0
+    args = [len(pin)] + list(pin)
+    CLA = 0x00
+    INS = 0x42 # Auth
+    P1 = 0x00
+    P2 = 0x00
+    Le = 0
+    response, sw1, sw2 = send_apdu(CLA, INS, P1, P2, Le, args, connection)
+
+
     print("Get secret status")
     pin = b'123456'
     secret_id = 0
-    args = [len(pin)] + list(pin) + [secret_id]
+    args = [secret_id]
     CLA = 0x00
     INS = 0x02 # Get secret status
     P1 = 0x00
@@ -91,7 +103,7 @@ if __name__ == "__main__":
         secretB32 = base64.b32encode(secret)
         print("Set secret")
         print("secret base32 = ", secretB32)
-        args = [len(pin)] + list(pin) + [secret_id] + [len(secret)] + list(secret) + [len(name)] + list(name) + [method]
+        args = [secret_id] + [len(secret)] + list(secret) + [len(name)] + list(name) + [method]
         CLA = 0x00
         INS = 0x03 # Save secret
         P1 = 0x00
@@ -101,7 +113,7 @@ if __name__ == "__main__":
     
     print("Get HMAC")
     challenge = b'CHALLENGE'
-    args = [len(pin)] + list(pin) + [secret_id] + [len(challenge)] + list(challenge)
+    args = [secret_id] + [len(challenge)] + list(challenge)
     CLA = 0x00
     INS = 0x01 # Generate HMAC
     P1 = 0x00

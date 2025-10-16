@@ -10,7 +10,7 @@ import com.licel.jcardsim.utils.AIDUtil;
 
 import javacard.framework.AID;
 
-public class OTPCardTest_secrets {
+public class OTPCard_secrets_Test {
 
     private Simulator sim;
 

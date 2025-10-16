@@ -11,7 +11,7 @@ import com.licel.jcardsim.utils.*;
 import javacard.framework.*;
 
 
-public class OTPCardTest_unblockPIN {
+public class OTPCard_unblockPIN_Test {
     private Simulator sim;
 
     @BeforeEach

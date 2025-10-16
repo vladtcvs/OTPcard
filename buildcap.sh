@@ -1,5 +1,6 @@
 #!/bin/bash
 
+rm -f OTPCard.cap
 mkdir buildcap
 cp build.xml buildcap/
 cp -r ext/oracle_javacard_sdks/jc305u4_kit buildcap/

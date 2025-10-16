@@ -79,6 +79,7 @@ public class OTPCard extends Applet {
         private MessageDigest digest;
         private byte[] ipad;
         private byte[] opad;
+        private byte[] inner;
 
         public OTPRecord(byte maxNameLength)
         {
@@ -90,11 +91,12 @@ public class OTPCard extends Applet {
 
             ipad = JCSystem.makeTransientByteArray((short)128, JCSystem.CLEAR_ON_DESELECT);
             opad = JCSystem.makeTransientByteArray((short)128, JCSystem.CLEAR_ON_DESELECT);
+            inner = JCSystem.makeTransientByteArray((short)64, JCSystem.CLEAR_ON_DESELECT);
             for (short i = 0; i < name.length; ++i)
                 name[0] = 0;
         }
 
-        private short GenerateHMAC_SHA1(byte[] challenge, byte[] buffer)
+        private short GenerateHMAC_SHA1(byte[] input_buffer, short pos, short len, byte[] buffer)
         {
             if (buffer.length < 20)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -104,10 +106,9 @@ public class OTPCard extends Applet {
                 opad[i] = (byte) (secret[i] ^ 0x5C);
             }
 
-            byte[] inner = JCSystem.makeTransientByteArray((short)20, JCSystem.CLEAR_ON_DESELECT);
             digest.reset();
             digest.update(ipad, (short) 0, (short) 64);
-            digest.update(challenge, (short) 0, (short) challenge.length);
+            digest.update(input_buffer, pos, len);
             digest.doFinal(inner, (short) 0, (short) 0, inner, (short) 0);
             digest.reset();
             digest.update(opad, (short) 0, (short) 64);
@@ -115,17 +116,17 @@ public class OTPCard extends Applet {
             return 20;
         }
 
-        private short GenerateHMAC_SHA256(byte[] challenge, byte[] buffer)
+        private short GenerateHMAC_SHA256(byte[] input_buffer, short pos, short len, byte[] buffer)
         {
             return 32;
         }
 
-        private short GenerateHMAC_SHA512(byte[] challenge, byte[] buffer)
+        private short GenerateHMAC_SHA512(byte[] input_buffer,  short pos, short len, byte[] buffer)
         {
             return 64;
         }
 
-        public short GenerateHMAC(byte[] challenge, byte[] buffer)
+        public short GenerateHMAC(byte[] input_buffer, short pos, short len, byte[] buffer)
         {
             if (method == HMAC_HASH.NONE) {
                 ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
@@ -134,11 +135,11 @@ public class OTPCard extends Applet {
 
             switch (method) {
             case HMAC_HASH.SHA1:
-                return GenerateHMAC_SHA1(challenge, buffer);
+                return GenerateHMAC_SHA1(input_buffer, pos, len, buffer);
             case HMAC_HASH.SHA256:
-                return GenerateHMAC_SHA256(challenge, buffer);
+                return GenerateHMAC_SHA256(input_buffer, pos, len, buffer);
             case HMAC_HASH.SHA512:
-                return GenerateHMAC_SHA512(challenge, buffer);
+                return GenerateHMAC_SHA512(input_buffer, pos, len, buffer);
             default:
                 ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
                 return 0;
@@ -206,11 +207,11 @@ public class OTPCard extends Applet {
             return method;
         }
 
-        public byte[] GetName()
+        public byte[] GetName(short[] posoff)
         {
-            byte[] ret = JCSystem.makeTransientByteArray(name_length, JCSystem.CLEAR_ON_DESELECT);
-            Util.arrayCopyNonAtomic(name, (short)0, ret, (short)0, name_length);
-            return ret;
+            posoff[0] = 0;
+            posoff[1] = name_length;
+            return name;
         }
     }
 
@@ -434,14 +435,12 @@ public class OTPCard extends Applet {
         getRecord(buffer, off_lc_data, lc_len, pos, readed);
         short challenge_pos = readed[0];
         short challenge_len = readed[1];
-        byte[] challenge_data = JCSystem.makeTransientByteArray(challenge_len, JCSystem.CLEAR_ON_DESELECT);;
-        Util.arrayCopyNonAtomic(buffer, (short)(off_lc_data + challenge_pos), challenge_data, (short)0, challenge_len);
         pos = readed[2];
 
         if (id >= otp_records.length)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
-        short hmac_len = otp_records[id].GenerateHMAC(challenge_data, buffer);
+        short hmac_len = otp_records[id].GenerateHMAC(buffer, (short)(off_lc_data + challenge_pos), challenge_len, buffer);
         apdu.setOutgoingAndSend((short) 0, hmac_len);
     }
 
@@ -469,16 +468,17 @@ public class OTPCard extends Applet {
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
         byte used = otp_records[id].IsUsed() ? (byte)1 : (byte)0;
-        byte[] name = otp_records[id].GetName();
+        byte[] name = otp_records[id].GetName(readed);
+        byte name_len = (byte)readed[1];
         byte method = otp_records[id].GetMethod();
 
-        if (buffer.length < (short)(3 + name.length))
+        if (buffer.length < (short)(3 + name_len))
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         short anslen = 0;
         buffer[anslen++] = used;
-        buffer[anslen++] = (byte)name.length;
-        for (short i = 0; i < name.length; i++)
+        buffer[anslen++] = name_len;
+        for (short i = 0; i < name_len; i++)
             buffer[anslen++] = name[i];
         buffer[anslen++] = method;
         apdu.setOutgoingAndSend((short) 0, anslen);
@@ -503,7 +503,7 @@ public class OTPCard extends Applet {
         short new_pin_len = readed[1];
         pos = readed[2];
 
-        if (new_pin_len + 1 != lc_len)
+        if ((short)(new_pin_len + 1) != lc_len)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         if (new_pin_len > MAX_PIN_SIZE)
@@ -537,7 +537,7 @@ public class OTPCard extends Applet {
         short new_pin_len = readed[1];
         pos = readed[2];
 
-        if (pin_len + new_pin_len + 2 != lc_len)
+        if ((short)(pin_len + new_pin_len + 2) != lc_len)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         if (AdminPIN.getTriesRemaining() == 0)

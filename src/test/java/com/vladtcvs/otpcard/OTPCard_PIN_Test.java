@@ -10,7 +10,7 @@ import com.licel.jcardsim.utils.*;
 
 import javacard.framework.*;
 
-public class OTPCardTest_updatePIN {
+public class OTPCard_PIN_Test {
 
     private Simulator sim;
 
